@@ -1,0 +1,4 @@
+# Standalone Streamlit UI — talks to the FastAPI backend over HTTP.
+# Deliberately minimal: no langchain / torch / pinecone here.
+streamlit>=1.42.0
+requests>=2.32.0
