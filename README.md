@@ -17,7 +17,7 @@ The system is built as **two deployable container images** plus shared backend c
 
 | Image | Contents | Serves |
 | ----- | -------- | ------ |
-| **Image 1 — Backend + React** (root `Dockerfile`) | FastAPI API + compiled React SPA | API at `/api/v1`, React app at `/` |
+| **Image 1 — Backend + React** (root `Dockerfile`) | FastAPI API (from `backend/`) + compiled React SPA | API at `/api/v1`, React app at `/` |
 | **Image 2 — Streamlit** (`ui/Dockerfile`) | Standalone Streamlit UI | An alternative web UI that calls the backend over HTTP |
 
 The React frontend is bundled **into** the backend image: a Node build stage
@@ -61,7 +61,7 @@ in sequence, each with a single responsibility:
 - **Embeddings:** local `sentence-transformers/all-MiniLM-L6-v2` (384-dim, runs
   on CPU, no API key required).
 - **Vector store / RAG:** Pinecone (optional — toggled with `ENABLE_RAG`).
-- **Database:** SQLite via SQLAlchemy, seeded from `data/doctors.csv`.
+- **Database:** SQLite via SQLAlchemy, seeded from `backend/data/doctors.csv`.
 - **Backend:** FastAPI + Uvicorn.
 - **Frontends:** React (Vite) and Streamlit.
 - **Deploy:** Docker -> Google Cloud Run, via GitHub Actions + Artifact Registry.
@@ -72,42 +72,51 @@ in sequence, each with a single responsibility:
 
 ```
 .
-├── main.py                      # FastAPI app entry; serves API + React SPA
-├── requirements.txt             # Backend + ML dependencies
-├── setup.sh                     # Local setup helper
-├── Dockerfile                   # IMAGE 1: Node build stage (React) + Python backend
+├── Dockerfile                   # IMAGE 1: Node stage (React) + Python backend (reads backend/)
 ├── docker-compose.yml           # Local: api (backend+React) + streamlit together
-├── .dockerignore  .gitignore  .env.example
+├── .dockerignore  .gitignore
 ├── README.md                    # This file
 ├── CHANGES.md                   # Log of fixes / migration notes
+├── setup.sh                     # Local setup helper
 │
-├── config/                      # Configuration
-│   ├── settings.py              #   Pydantic settings (env-driven)
-│   └── logging.py               #   Logging setup
-│
-├── core/                        # Core engine
-│   ├── llm.py                   #   Claude (ChatAnthropic) wrapper + structured output
-│   ├── rag.py                   #   Pinecone vector store + local HF embeddings
-│   ├── orchestrator.py          #   Runs the 4 agents in sequence
-│   ├── database.py              #   SQLAlchemy models, session mgmt, doctor seeding
-│   └── schemas.py               #   Pydantic request/response models
-│
-├── agents/                      # Multi-agent pipeline
-│   ├── symptom_agent.py
-│   ├── doctor_agent.py
-│   ├── scheduling_agent.py
-│   └── summary_agent.py
-│
-├── api/
-│   └── routes.py                # API endpoints (mounted under /api/v1)
-│
-├── utils/
-│   ├── helpers.py
-│   └── validators.py
-│
-├── data/
-│   ├── doctors.csv              # 100 doctors (seeded into the DB at startup)
-│   └── symptoms_kb.json         # 200-entry knowledge base (RAG corpus)
+├── backend/                     # All backend (FastAPI) code
+│   ├── main.py                  #   App entry; serves API + React SPA
+│   ├── requirements.txt         #   Backend + ML dependencies
+│   ├── .env.example
+│   │
+│   ├── config/                  #   Configuration
+│   │   ├── settings.py          #     Pydantic settings (env-driven)
+│   │   └── logging.py           #     Logging setup
+│   │
+│   ├── core/                    #   Core engine
+│   │   ├── llm.py               #     Claude (ChatAnthropic) wrapper + structured output
+│   │   ├── rag.py               #     Pinecone vector store + local HF embeddings
+│   │   ├── orchestrator.py      #     Runs the 4 agents in sequence
+│   │   ├── database.py          #     SQLAlchemy models, session mgmt, doctor seeding
+│   │   └── schemas.py           #     Pydantic request/response models
+│   │
+│   ├── agents/                  #   Multi-agent pipeline
+│   │   ├── symptom_agent.py
+│   │   ├── doctor_agent.py
+│   │   ├── scheduling_agent.py
+│   │   └── summary_agent.py
+│   │
+│   ├── api/
+│   │   └── routes.py            #   API endpoints (mounted under /api/v1)
+│   │
+│   ├── utils/
+│   │   ├── helpers.py
+│   │   └── validators.py
+│   │
+│   ├── data/
+│   │   ├── doctors.csv          #   100 doctors (seeded into the DB at startup)
+│   │   └── symptoms_kb.json     #   200-entry knowledge base (RAG corpus)
+│   │
+│   └── tests/
+│       ├── test_api.py          #   API endpoint tests
+│       ├── test_agents.py       #   Agent tests (mocked LLM)
+│       ├── test_e2e.py          #   Live end-to-end (requires a running server)
+│       └── mock_llm_outputs.json
 │
 ├── frontend/                    # React SPA (bundled into IMAGE 1 at build time)
 │   ├── index.html
@@ -125,12 +134,6 @@ in sequence, each with a single responsibility:
 │   ├── streamlit_app.py
 │   ├── requirements.txt         #   Minimal: streamlit + requests
 │   └── Dockerfile  .dockerignore
-│
-├── tests/
-│   ├── test_api.py              # API endpoint tests
-│   ├── test_agents.py           # Agent tests (mocked LLM)
-│   ├── test_e2e.py              # Live end-to-end (requires a running server)
-│   └── mock_llm_outputs.json
 │
 └── .github/workflows/
     └── deploy.yaml              # CI: test -> build+deploy backend -> build+deploy Streamlit
@@ -169,8 +172,8 @@ The response contains four sections: `symptom_analysis`, `doctor_recommendations
 
 ## Configuration
 
-Settings are loaded from environment variables (or a local `.env`). See
-`.env.example`.
+Settings are loaded from environment variables (or a local `backend/.env`). See
+`backend/.env.example`.
 
 | Variable | Required | Default | Purpose |
 | -------- | -------- | ------- | ------- |
@@ -179,7 +182,7 @@ Settings are loaded from environment variables (or a local `.env`). See
 | `ENABLE_RAG` | No | `true` | Toggle RAG retrieval on/off |
 | `LLM_MODEL_NAME` | No | `claude-sonnet-4-6` | Claude model |
 | `EMBEDDING_MODEL_NAME` | No | `sentence-transformers/all-MiniLM-L6-v2` | Local embedding model |
-| `PINECONE_INDEX_NAME` | No | `HealthLink-AI` | Index name (must be 384-dim) |
+| `PINECONE_INDEX_NAME` | No | `healthlink` | Index name (must be 384-dim) |
 | `CORS_ORIGINS` | No | localhost dev origins | Comma-separated allowed origins |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `PORT` | No | `8080` | Port the server binds (Cloud Run injects this) |
@@ -192,29 +195,34 @@ Settings are loaded from environment variables (or a local `.env`). See
 
 ## Running locally
 
+> Backend commands run from inside the `backend/` directory so absolute imports
+> (`from config.settings import ...`) resolve correctly.
+
 ### Option A — backend + React (one process)
 
 ```bash
-# 1. Install backend deps
-pip install -r requirements.txt
-
-# 2. Build the React frontend so FastAPI can serve it
+# 1. Build the React frontend so FastAPI can serve it
 cd frontend && npm install && npm run build && cd ..
 
-# 3. Set your key and run
+# 2. Install backend deps and run (from backend/)
+cd backend
+pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...
 export ENABLE_RAG=false            # or set PINECONE_API_KEY and leave RAG on
 uvicorn main:app --reload
 ```
 
 Open http://localhost:8000 — the React app loads, and the API is at
-`/api/v1`. (If you skip step 2, `/` returns JSON instead of the SPA.)
+`/api/v1`. (If you skip the frontend build, `/` returns JSON instead of the SPA.)
+
+> Note: the combined image expects the built SPA at `backend/frontend/dist` when
+> bundled; for local development the React dev server (Option B) is simpler.
 
 ### Option B — React dev server (hot reload)
 
 ```bash
 # terminal 1: backend
-uvicorn main:app --reload
+cd backend && uvicorn main:app --reload
 # terminal 2: frontend dev server (proxies /api to :8000)
 cd frontend && npm install && npm run dev      # http://localhost:3000
 ```
@@ -243,6 +251,8 @@ docker compose up --build
 ## Testing
 
 ```bash
+cd backend
+
 # offline tests (mocked LLM) — no API key needed
 pytest tests/test_api.py tests/test_agents.py -v
 
@@ -257,7 +267,7 @@ pytest tests/test_e2e.py -v
 Deployment is automated via `.github/workflows/deploy.yaml`: pushing to `main`
 runs tests, builds and deploys the **backend + React** image, then builds and
 deploys the **Streamlit** image. Both go to one Artifact Registry repo
-(`HealthLink-AI`) as two images, and become two Cloud Run services.
+(`healthlink`) as two images, and become two Cloud Run services.
 
 ### One-time setup
 
@@ -291,15 +301,15 @@ Writer, and Service Account User on the runtime SA.
 ### Manual deploy (alternative to CI)
 
 ```bash
-# Backend + React
-gcloud run deploy HealthLink-AI \
+# Backend + React (root context; the Dockerfile reads from backend/)
+gcloud run deploy healthlink \
   --source . --region asia-south1 --allow-unauthenticated --port 8080 \
   --memory 4Gi --cpu 2 \
   --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,PINECONE_API_KEY=PINECONE_API_KEY:latest"
 
 # Streamlit (point it at the backend URL)
 cd ui
-gcloud run deploy HealthLink-AI-streamlit \
+gcloud run deploy healthlink-streamlit \
   --source . --region asia-south1 --allow-unauthenticated --port 8080 \
   --set-env-vars API_BASE_URL=https://YOUR_BACKEND_URL/api/v1
 ```
@@ -316,8 +326,8 @@ curl -s https://YOUR_BACKEND_URL/ | head -c 40  # should start with <!doctype ht
 ## Notes & gotchas
 
 - **SQLite is ephemeral on Cloud Run.** The DB is re-seeded per instance from
-  `data/doctors.csv`; appointments don't persist across restarts. Use Cloud SQL
-  / Firestore for persistence.
+  `backend/data/doctors.csv`; appointments don't persist across restarts. Use
+  Cloud SQL / Firestore for persistence.
 - **First cold start is slower** — the backend image bundles the embedding model
   and the React build; the first request after scale-from-zero pays a startup cost.
 - **Two images accumulate in Artifact Registry.** Consider a cleanup policy to

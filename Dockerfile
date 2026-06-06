@@ -33,7 +33,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements and install dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Final stage
@@ -61,7 +61,7 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 
 # Copy application code
-COPY . .
+COPY backend/ .
 
 # Copy the built React frontend from the frontend-builder stage so FastAPI can
 # serve it at "/". (frontend/ source is excluded via .dockerignore; only the
@@ -89,4 +89,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Run application. Shell form so ${PORT} is expanded at runtime; `exec` keeps
 # uvicorn as PID 1 so it receives Cloud Run's SIGTERM for graceful shutdown.
-CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 1
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT} --workers 1"]

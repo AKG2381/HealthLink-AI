@@ -18,9 +18,12 @@ dependencies = [
     "langchain-core>=0.3.0",
     "langchain-text-splitters>=0.3.0",
     "langchain-google-genai>=3.0.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-huggingface>=0.1.2",
 
     # Vector Store
     "pinecone>=7.0.0",
+    "sentence-transformers>=3.0.0",
 
     # Database
     "sqlalchemy>=2.0.25",
@@ -49,11 +52,7 @@ dev = [
 
 [tool.setuptools]
 packages = [
-    "agents",
-    "api",
-    "config",
-    "core",
-    "data",
+    "backend",
     "ui"
 ]
 

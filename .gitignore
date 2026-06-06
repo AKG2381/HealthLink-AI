@@ -76,3 +76,5 @@ dist
 .env
 .env.local
 *.log
+
+GCP_SA_KEY.json
